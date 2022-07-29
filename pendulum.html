@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <title>GAME</title>
+        <!-- <link rel="stylesheet" href="../style/stylesheet.css"> -->
+        <script type="text/javascript" src="field_of_view.js"></script>
+        <script type="text/javascript" src="a_star.js"></script>
+        <script type="text/javascript" src="bayes.js"></script>
+    </head>
+    <body>
+        <div class="container">
+            <div class="container__main">
+                <main class="content"> 
+                    <canvas id="myCanvas" width="500" height="500" margin="auto">
+                    </canvas>
+                    <div class="slidecontainer">
+                        <input type="range" min="0" max="100" value="50" class="slider" id="myRange">
+                        <p id="output"></p>
+                    </div>
+                </main>
+            </div>
+        </div>  
+        <script>
+            var canvas = document.getElementById("myCanvas");
+            var slider = document.getElementById("myRange");
+            var output = document.getElementById("output");
+            var ctx = canvas.getContext("2d");
+
+            
+            var WIDTH = canvas.width
+            
+            var xPos = 0;
+            var theta = -2;
+            var u = 0;
+            var v = 0;
+            
+            var beamLength = 0.5;
+            
+            var cartSize = WIDTH/10;
+            var cartMass = 10;
+            var ballRadius = WIDTH/30;
+            var ballMass = 5;
+            
+            var gravConst = 9.8;
+
+            var cartForce = 0;
+            
+            function drawBeam(){
+                
+                var cartX = xPos*WIDTH/2 + WIDTH/2;
+                var cartY = WIDTH/2;
+
+                var ballX = (Math.sin(theta)*beamLength+xPos)*WIDTH/2 + WIDTH/2;
+                var ballY = (Math.cos(theta)*beamLength)*WIDTH/2 + WIDTH/2;
+
+                ctx.beginPath();
+                ctx.moveTo(cartX, cartY);
+                ctx.lineTo(ballX, ballY);
+                ctx.lineWidth= 10;
+                ctx.strokeStyle= "grey";
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(cartX+WIDTH, cartY);
+                ctx.lineTo(ballX+WIDTH, ballY);
+                ctx.lineWidth= 10;
+                ctx.strokeStyle= "grey";
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(cartX-WIDTH, cartY);
+                ctx.lineTo(ballX-WIDTH, ballY);
+                ctx.lineWidth= 10;
+                ctx.strokeStyle= "grey";
+                ctx.stroke();
+            }
+
+            function drawCart(){
+
+                var cartX = xPos*WIDTH/2 + WIDTH/2;
+                var cartY = WIDTH/2;
+
+                ctx.beginPath();
+                ctx.rect(cartX- cartSize/2-1, cartY-cartSize/2-1, cartSize+2, cartSize+2);
+                ctx.fillStyle = "#222222";
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.rect(cartX- cartSize/2, cartY-cartSize/2, cartSize, cartSize);
+                ctx.fillStyle = "#AAAAAA";
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.rect(cartX- cartSize/2-1 + WIDTH, cartY-cartSize/2-1, cartSize+2, cartSize+2);
+                ctx.fillStyle = "#222222";
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.rect(cartX- cartSize/2 + WIDTH, cartY-cartSize/2, cartSize, cartSize);
+                ctx.fillStyle = "#AAAAAA";
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.rect(cartX- cartSize/2-1 - WIDTH, cartY-cartSize/2-1, cartSize+2, cartSize+2);
+                ctx.fillStyle = "#222222";
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.rect(cartX- cartSize/2 - WIDTH, cartY-cartSize/2, cartSize, cartSize);
+                ctx.fillStyle = "#AAAAAA";
+                ctx.fill();
+            }
+
+            function drawBall(){
+                var ballX = (Math.sin(theta)*beamLength+xPos)*WIDTH/2 + WIDTH/2;
+                var ballY = (Math.cos(theta)*beamLength)*WIDTH/2 + WIDTH/2;
+
+                ctx.beginPath();
+                ctx.arc(ballX, ballY, ballRadius+1, 0, 2 * Math.PI);
+                ctx.fillStyle = "#222222";
+                ctx.fill(); 
+
+                ctx.beginPath();
+                ctx.arc(ballX, ballY, ballRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = "#AAAAAA";
+                ctx.fill(); 
+
+                ctx.beginPath();
+                ctx.arc(ballX+WIDTH, ballY, ballRadius+1, 0, 2 * Math.PI);
+                ctx.fillStyle = "#222222";
+                ctx.fill(); 
+
+                ctx.beginPath();
+                ctx.arc(ballX+WIDTH, ballY, ballRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = "#AAAAAA";
+                ctx.fill(); 
+
+                ctx.beginPath();
+                ctx.arc(ballX - WIDTH, ballY, ballRadius+1, 0, 2 * Math.PI);
+                ctx.fillStyle = "#222222";
+                ctx.fill(); 
+
+                ctx.beginPath();
+                ctx.arc(ballX - WIDTH, ballY, ballRadius, 0, 2 * Math.PI);
+                ctx.fillStyle = "#AAAAAA";
+                ctx.fill(); 
+            }
+
+            var frictionCoef = 50;
+            function f1(x, theta, u, v){
+                return 1/(cartMass+ballMass - ballMass* Math.cos(theta)**2)*( 
+                    ballMass* gravConst*Math.sin(theta)*Math.cos(theta)
+                    +beamLength*ballMass*v*v *Math.sin(theta) +  cartForce - frictionCoef*u);
+            }
+            function f2(x,theta, u, v){
+                return -1/beamLength* (gravConst*Math.sin(theta)
+                    +f1(x,theta,u,v)*Math.cos(theta));
+            }
+            function f3(x,theta, u,v){
+                return u;
+            }
+            function f4(x,theta, u, v){
+                return v;
+            }
+
+            function update(){
+                // theta += 0.01;
+                // xPos +=0.01;
+                var h = 1/60; 
+
+                k1_u = f1(xPos,theta,u,v);
+                k1_v = f2(xPos,theta,u,v);
+                k1_x = f3(xPos,theta,u,v);
+                k1_th= f4(xPos,theta,u,v);
+
+                k2_u=f1(xPos+h*k1_x/2, theta+h*k1_th/2, u+h*k1_u/2, v + h*k1_v/2);
+                k2_v=f2(xPos+h*k1_x/2, theta+h*k1_th/2, u+h*k1_u/2, v + h*k1_v/2);
+                k2_x=f3(xPos+h*k1_x/2, theta+h*k1_th/2, u+h*k1_u/2, v + h*k1_v/2);
+                k2_th=f4(xPos+h*k1_x/2, theta+h*k1_th/2, u+h*k1_u/2, v + h*k1_v/2);
+                
+                k3_u=f1(xPos+h*k2_x/2, theta+h*k2_th/2, u+h*k2_u/2, v + h*k2_v/2);
+                k3_v=f2(xPos+h*k2_x/2, theta+h*k2_th/2, u+h*k2_u/2, v + h*k2_v/2);
+                k3_x=f3(xPos+h*k2_x/2, theta+h*k2_th/2, u+h*k2_u/2, v + h*k2_v/2);
+                k3_th=f4(xPos+h*k2_x/2, theta+h*k2_th/2, u+h*k2_u/2, v + h*k2_v/2);
+
+                k4_u=f1(xPos+h*k3_x, theta+h*k3_th, u+h*k3_u, v + h*k3_v);
+                k4_v=f2(xPos+h*k3_x, theta+h*k3_th, u+h*k3_u, v + h*k3_v);
+                k4_x=f3(xPos+h*k3_x, theta+h*k3_th, u+h*k3_u, v + h*k3_v);
+                k4_th=f4(xPos+h*k3_x, theta+h*k3_th, u+h*k3_u, v + h*k3_v);
+
+                xPos= xPos + 1/6*(k1_x + 2*k2_x + 2*k3_x + k4_x)*h;
+                theta = theta + 1/6*(k1_th + 2*k2_th + 2*k3_th + k4_th)*h;
+                u = u + 1/6*(k1_u + 2*k2_u + 2*k3_u + k4_u)*h;
+                v = v + 1/6*(k1_v + 2*k2_v + 2*k3_v + k4_v)*h;
+                
+                if (xPos<-1){
+                    xPos+= 2;
+                }
+                if (xPos > 1){
+                    xPos -=2;
+                }
+
+                if (theta > Math.PI){
+                    theta-= 2*Math.PI;
+                }
+                if (theta <-Math.PI){
+                    theta+= 2*Math.PI;
+                }
+            }
+
+            
+
+            var count = 0;
+            function draw(){
+                count++;
+                ctx.clearRect(0,0, canvas.width, canvas.height);
+                ctx.beginPath();
+                ctx.rect(0, 0, 500, 500);
+                ctx.fillStyle = "#222222";
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(0, WIDTH/2);
+                ctx.lineTo(WIDTH, WIDTH/2);
+                ctx.lineWidth= 1;
+                ctx.strokeStyle= "grey";
+                ctx.stroke();
+
+                cartForce = (slider.value - 50)*2;
+                output.textContent = cartForce;
+
+                
+                update();
+                drawBeam();
+                drawCart();
+                drawBall();
+
+
+                requestAnimationFrame(draw);
+            }
+
+        draw()
+        </script>
+    </body>
+</html>
